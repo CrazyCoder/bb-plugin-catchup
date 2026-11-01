@@ -9,6 +9,7 @@ import {
   cleanRecapText,
   countUserTurns,
   GENERATION_REASON_OPTIONS,
+  latestUserMessages,
   latestUserRowId,
   MAX_AUTOMATIC_RAW_RECAP_CHARS,
   MAX_RECAP_CHARS,
@@ -707,6 +708,11 @@ export default async function plugin(bb: BbPluginApi) {
     }
   };
 
+  // A language setting or a custom prompt may ask for a language other than
+  // the user's.
+  const checksUserLanguage = () =>
+    config.prompt === DEFAULT_RECAP_PROMPT && !config.language;
+
   // The prompt asks for the user's language, but the model does not follow it
   // reliably in either direction, so the result is checked here.
   const inUserLanguage = async (
@@ -760,7 +766,16 @@ export default async function plugin(bb: BbPluginApi) {
     if (automatic && turns < config.minTurns)
       return result("not_enough_turns", turns);
     const previous = latestUsableRecap(threadId);
-    const input = buildRecapWorkerInput(rows, previous, threadId);
+    // A recap in the wrong language would carry that language into the next one.
+    const wrongLanguage =
+      previous !== null &&
+      checksUserLanguage() &&
+      recapNeedsRewrite(previous.summary, latestUserMessages(rows, threadId));
+    const input = buildRecapWorkerInput(
+      rows,
+      wrongLanguage ? null : previous,
+      threadId,
+    );
     if (input.transcript === "") return result("no_conversation", turns);
     if (
       automatic &&
@@ -795,10 +810,8 @@ export default async function plugin(bb: BbPluginApi) {
       config.language,
     );
     const first = await runWorker(beforeWorker, prompt, execution, signal);
-    // A language setting or a custom prompt may ask for a language other than
-    // the user's, so only the default case is checked.
     const raw =
-      config.prompt === DEFAULT_RECAP_PROMPT && !config.language
+      checksUserLanguage()
         ? await inUserLanguage(
             first,
             input.latestUserMessages,

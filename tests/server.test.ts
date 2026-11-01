@@ -224,6 +224,22 @@ test("a language setting reaches the worker and turns off the user-language chec
   }
 });
 
+test("a previous recap in the wrong script is left out of the next prompt", async () => {
+  const harness = await createHarness({ prompt: DEFAULT_RECAP_PROMPT, timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, "", RUSSIAN_RECAP, RUSSIAN_RECAP] });
+  try {
+    await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    assert.equal(harness.spawned.length, 3);
+    assert.doesNotMatch(harness.spawned[2].prompt, /<previous-recap>/);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    assert.match(harness.spawned[3].prompt, /<previous-recap>\nТы спросил/);
+  } finally {
+    await harness.close();
+  }
+});
+
 test("a custom prompt is free to choose the language", async () => {
   const harness = await createHarness({ prompt: "Always answer in English.", timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, RUSSIAN_RECAP] });
   try {
