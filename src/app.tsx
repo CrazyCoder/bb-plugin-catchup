@@ -18,6 +18,7 @@ import {
   generationErrorMessage,
   isBlankRecapPrompt,
   MAX_CONCURRENT_GENERATIONS,
+  MAX_RECAP_LANGUAGE_CHARS,
   MAX_RECAP_PROMPT_CHARS,
   MIN_CONCURRENT_GENERATIONS,
   bannerStartsExpanded,
@@ -309,7 +310,8 @@ function RecapComposerBannerContent({
 }) {
   const { recap, dismissed, generating, loading, error, generate, dismiss } = useThreadRecap(threadId);
   const opensExpanded = bannerStartsExpanded(mode);
-  const compact = mode === RECAP_DISPLAY_MODES.compact || opensExpanded;
+  const minimal = mode === RECAP_DISPLAY_MODES.minimal;
+  const compact = mode === RECAP_DISPLAY_MODES.compact || opensExpanded || minimal;
   const [expanded, setExpanded] = useState(opensExpanded);
 
   useEffect(() => {
@@ -317,7 +319,7 @@ function RecapComposerBannerContent({
   }, [mode, recap?.id, threadId]);
 
   if (!recap || dismissed) {
-    if (!generating || dismissed) {
+    if (!generating || dismissed || minimal) {
       if (!error) return null;
       return (
         <div
@@ -341,6 +343,27 @@ function RecapComposerBannerContent({
         aria-label="Generating recap"
       >
         <p className="text-sm text-muted-foreground">Generating recap…</p>
+      </div>
+    );
+  }
+
+  if (minimal) {
+    return (
+      <div
+        className="mx-auto mb-2 flex w-full min-w-0 max-w-3xl items-start gap-2 rounded-lg bg-muted px-3 py-2"
+        role="region"
+        aria-label="Latest recap"
+      >
+        <div aria-live="polite" className="min-w-0 flex-1 text-sm leading-5 text-foreground">
+          <p className="break-words [overflow-wrap:anywhere]">
+            <span className="text-muted-foreground">※ recap: </span>
+            {recap.summary}
+          </p>
+          {error ? <p role="alert" className="mt-1 text-xs text-destructive">{error}</p> : null}
+        </div>
+        <div className="-my-1.5 -mr-1.5 shrink-0">
+          <DismissButton onClick={() => void dismiss(recap.id)} />
+        </div>
       </div>
     );
   }
@@ -555,7 +578,15 @@ function DisplayModePreview({
         <span className="text-xs text-muted-foreground">{selected ? "Current" : "Preview"}</span>
       </div>
       <div className="mt-3 rounded-md bg-background p-2" aria-hidden="true">
-        {mode === RECAP_DISPLAY_MODES.compact ? (
+        {mode === RECAP_DISPLAY_MODES.minimal ? (
+          <div className="flex items-start gap-2 rounded-lg bg-muted p-2">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="h-2 w-full rounded-full bg-background" />
+              <div className="h-2 w-3/5 rounded-full bg-background" />
+            </div>
+            <div className="h-2 w-2 shrink-0 rounded-sm bg-background" />
+          </div>
+        ) : mode === RECAP_DISPLAY_MODES.compact ? (
           <div className="space-y-2 rounded-lg border border-border bg-surface-recessed/20 p-2">
             <div className="flex items-center gap-2">
               <div className="h-5 w-5 shrink-0 rounded-md bg-muted" />
@@ -890,6 +921,22 @@ function SettingsSectionBody() {
                 onCommit={(maxConcurrent) => updateDraft((current) => ({ ...current, maxConcurrent }))}
               />
               <span className="block text-xs text-muted-foreground">How many recap workers may run at once.</span>
+            </label>
+            <label className="space-y-1.5">
+              <span className="block font-medium text-foreground">Recap language</span>
+              <input
+                type="text"
+                value={draft.language}
+                maxLength={MAX_RECAP_LANGUAGE_CHARS}
+                placeholder="Automatic"
+                disabled={settingsSaving}
+                onChange={(event) => {
+                  const language = textFromInput(event);
+                  updateDraft((current) => ({ ...current, language }));
+                }}
+                className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              <span className="block text-xs text-muted-foreground">For example, Russian. Leave empty to follow the user's latest messages.</span>
             </label>
           </div>
           <label className="space-y-1.5">

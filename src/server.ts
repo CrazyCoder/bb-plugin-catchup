@@ -12,6 +12,7 @@ import {
   latestUserRowId,
   MAX_AUTOMATIC_RAW_RECAP_CHARS,
   MAX_RECAP_CHARS,
+  MAX_RECAP_LANGUAGE_CHARS,
   MAX_RECAP_PROMPT_CHARS,
   MAX_TRANSCRIPT_CHARS,
   parsePositiveInteger,
@@ -104,6 +105,7 @@ const modelSelectionSchema = z
 export type ModelSelection = z.infer<typeof modelSelectionSchema>;
 
 const displayModeSchema = z.enum([
+  RECAP_DISPLAY_MODES.minimal,
   RECAP_DISPLAY_MODES.compact,
   RECAP_DISPLAY_MODES.expanded,
   RECAP_DISPLAY_MODES.card,
@@ -122,6 +124,7 @@ const recapSettingsSchema = z
       .min(MIN_CONCURRENT_GENERATIONS)
       .max(MAX_CONCURRENT_GENERATIONS),
     displayMode: displayModeSchema,
+    language: z.string().max(MAX_RECAP_LANGUAGE_CHARS),
     prompt: z.string().max(MAX_RECAP_PROMPT_CHARS),
   })
   .strict();
@@ -789,11 +792,13 @@ export default async function plugin(bb: BbPluginApi) {
       input.transcript,
       input.previousRecap,
       input.latestUserMessages,
+      config.language,
     );
     const first = await runWorker(beforeWorker, prompt, execution, signal);
-    // A custom prompt may require a specific language, so only the default is checked.
+    // A language setting or a custom prompt may ask for a language other than
+    // the user's, so only the default case is checked.
     const raw =
-      config.prompt === DEFAULT_RECAP_PROMPT
+      config.prompt === DEFAULT_RECAP_PROMPT && !config.language
         ? await inUserLanguage(
             first,
             input.latestUserMessages,

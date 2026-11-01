@@ -5,8 +5,8 @@ Recap creates short, display-only summaries of BB threads. It stores each recap 
 - Generate from the thread header, command palette, or CLI. Manual generation requires a visible, idle thread; hidden worker threads are not eligible.
 - Create automatic recaps after a visible thread goes idle and reaches the configured user-turn minimum. A thread with a child thread still running stays active. Recap does not scan idle threads at startup.
 - Refresh from the previous recap plus new turns when a thread has moved on. A new turn hides the previous recap until another is generated.
-- Show a compact composer banner, a banner that opens expanded, a recap card, or no inline recap until you open the Recap panel. The × button hides the current recap until a newer one replaces it; the Recap panel still shows it.
-- Write each recap in the language of the user's latest messages, whatever the language of the tool output. With the default prompt, Recap checks the result's writing system, and a mismatch takes one more short model request to translate it. A custom prompt sets its own language rules.
+- Show a minimal card with only the text and ×, a compact composer banner, a banner that opens expanded, a recap card, or no inline recap until you open the Recap panel. The × button hides the current recap until a newer one replaces it; the Recap panel still shows it.
+- Write each recap in the language of the user's latest messages, whatever the language of the tool output. With the default prompt, Recap checks the result's writing system, and a mismatch takes one more short model request to translate it. A custom prompt sets its own language rules. To fix one language, set **Recap language** in settings; Recap then skips that check.
 - Configure the model, idle delay, turn minimum, concurrent workers, prompt, auto-cleanup, and display mode.
 
 ## Settings

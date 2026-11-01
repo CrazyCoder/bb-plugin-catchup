@@ -67,7 +67,11 @@ When new turns arrive, the next recap uses the previous recap plus those new tur
 
 ### 🪟 Choose a display
 
-Show a compact banner, a banner that opens expanded, a larger recap card, or no inline recap until you open the Recap panel. Close any of them with ×: that recap stays hidden until a newer one replaces it.
+Show a minimal card with only the text and ×, a compact banner, a banner that opens expanded, a larger recap card, or no inline recap until you open the Recap panel. Close any of them with ×: that recap stays hidden until a newer one replaces it.
+
+### 🌍 Choose a language
+
+Recaps follow the language of your latest messages. To fix one language for every thread, set **Recap language** in settings.
 
 </td>
 </tr>
@@ -118,7 +122,7 @@ bb plugin install path:$PWD --yes
 | **Plugin settings** | In **Recap behavior**, choose a model and configure automatic generation, cleanup, prompt, and display. |
 | **CLI** | Generate, show, or list recaps with `bb recap`. |
 
-Automatic generation and cleanup are on by default, and the inline display starts as a compact banner. The idle delay defaults to 30 seconds, the minimum is 3 user turns, and up to 2 recap workers may run at once. You can set the delay from 0–86,400 seconds, the minimum from 1–100 turns, and concurrency from 1–5 workers. The prompt accepts up to 8,000 characters; recap text is limited to 1,200 characters.
+Automatic generation and cleanup are on by default, and the inline display starts as the Minimal card. The idle delay defaults to 30 seconds, the minimum is 3 user turns, and up to 2 recap workers may run at once. You can set the delay from 0–86,400 seconds, the minimum from 1–100 turns, and concurrency from 1–5 workers. The prompt accepts up to 8,000 characters; recap text is limited to 1,200 characters.
 
 ## How it works
 

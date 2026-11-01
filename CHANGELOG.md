@@ -9,6 +9,8 @@ All notable changes to Recap are documented here. The format follows
 ### Added
 
 - Add a × button to the compact banner, expanded banner, and recap card. It hides the current recap on every client until a newer recap replaces it, and the Recap panel still shows it.
+- Add a Minimal display mode and make it the default: a card with no border that shows only the text and ×. Saved display modes stay as they are.
+- Add a Recap language setting. Empty follows the user's latest messages; a value such as Russian names that language in the prompt.
 - Add `bb recap preview`, which shows the recap card in open BB windows at once, without generating or storing anything.
 
 ### Fixed

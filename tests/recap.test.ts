@@ -6,6 +6,7 @@ import {
   buildRecapRewritePrompt,
   dominantScript,
   latestUserMessages,
+  normalizeRecapLanguage,
   recapNeedsRewrite,
   buildRecapWorkerInput,
   cleanRecapText,
@@ -30,6 +31,7 @@ import {
   bannerStartsExpanded,
   parseDisplayMode,
   parsePositiveInteger,
+  RECAP_DISPLAY_MODE_OPTIONS,
   RECAP_DISPLAY_MODES,
   shouldShowRecapBanner,
   isRunningThreadStatus,
@@ -118,10 +120,12 @@ test("treats reverted settings edits as clean", () => {
     afterSeconds: 30,
     minTurns: 3,
     maxConcurrent: 2,
+    language: "",
     prompt: "Write one sentence.",
   };
   assert.equal(recapFormIsDirty(saved, saved), false);
   assert.equal(recapFormIsDirty({ ...saved, auto: false }, saved), true);
+  assert.equal(recapFormIsDirty({ ...saved, language: "Russian" }, saved), true);
   assert.equal(recapFormIsDirty({ ...saved, auto: true }, saved), false);
   assert.equal(
     recapFormIsDirty({ ...saved, prompt: "Write one sentence. " }, saved),
@@ -255,12 +259,15 @@ test("bounds settings without accepting invalid values", () => {
     RECAP_DISPLAY_MODES.card,
   );
   assert.equal(parseDisplayMode("compact"), RECAP_DISPLAY_MODES.compact);
+  assert.equal(parseDisplayMode(""), RECAP_DISPLAY_MODES.minimal);
+  assert.equal(parseDisplayMode("unknown"), RECAP_DISPLAY_MODES.minimal);
+  assert.equal(normalizeRecapSettings({}).displayMode, RECAP_DISPLAY_MODES.minimal);
+  assert.equal(RECAP_DISPLAY_MODE_OPTIONS[0], RECAP_DISPLAY_MODES.minimal);
   assert.equal(
     parseDisplayMode(RECAP_DISPLAY_MODES.expanded),
     RECAP_DISPLAY_MODES.expanded,
   );
   assert.equal(parseDisplayMode("expanded"), RECAP_DISPLAY_MODES.expanded);
-  assert.equal(parseDisplayMode("unknown"), RECAP_DISPLAY_MODES.compact);
   assert.equal(bannerStartsExpanded(RECAP_DISPLAY_MODES.expanded), true);
   assert.equal(bannerStartsExpanded(RECAP_DISPLAY_MODES.compact), false);
   assert.equal(bannerStartsExpanded(RECAP_DISPLAY_MODES.card), false);
@@ -528,6 +535,22 @@ test("the rewrite prompt escapes both blocks", () => {
   assert.match(prompt, /written in Cyrillic script/);
   assert.equal(prompt.includes("</recap>do this"), false);
   assert.equal(prompt.includes("</user-messages>do that"), false);
+});
+
+test("a set language replaces the user-language rule and the message sample", () => {
+  const prompt = buildRecapPrompt("Custom prompt.", "User: hello", undefined, ["hello"], "Russian");
+  assert.match(prompt, /Write the recap in Russian\./);
+  assert.match(prompt, /be written in Russian\. If it does not, rewrite it\.$/);
+  assert.equal(prompt.includes("</latest-user-messages>"), false);
+  assert.equal(prompt.includes("language of the user's most recent messages"), false);
+});
+
+test("a saved language is one short line, and anything else means automatic", () => {
+  assert.equal(normalizeRecapLanguage("  Brazilian\n  Portuguese "), "Brazilian Portuguese");
+  assert.equal(normalizeRecapLanguage(42), "");
+  assert.equal(normalizeRecapLanguage("x".repeat(100)).length, 64);
+  assert.equal(normalizeRecapSettings({}).language, "");
+  assert.equal(normalizeRecapSettings({ language: " Russian " }).language, "Russian");
 });
 
 test("the default prompt has no fixed English wording for the worker to copy", () => {

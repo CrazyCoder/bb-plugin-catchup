@@ -10,6 +10,7 @@ Return exactly one plain-text sentence of about 25–40 words, with no heading, 
 ]);
 
 export const RECAP_DISPLAY_MODES = {
+  minimal: "Minimal",
   compact: "Compact banner",
   expanded: "Expanded banner",
   card: "Recap card",
@@ -20,6 +21,7 @@ export type RecapDisplayMode =
   (typeof RECAP_DISPLAY_MODES)[keyof typeof RECAP_DISPLAY_MODES];
 
 export const RECAP_DISPLAY_MODE_OPTIONS: RecapDisplayMode[] = [
+  RECAP_DISPLAY_MODES.minimal,
   RECAP_DISPLAY_MODES.compact,
   RECAP_DISPLAY_MODES.expanded,
   RECAP_DISPLAY_MODES.card,
@@ -33,7 +35,7 @@ export function parseDisplayMode(raw: string): RecapDisplayMode {
   if (raw === "expanded") return RECAP_DISPLAY_MODES.expanded;
   if (raw === "card") return RECAP_DISPLAY_MODES.card;
   if (raw === "on-demand") return RECAP_DISPLAY_MODES.onDemand;
-  return RECAP_DISPLAY_MODES.compact;
+  return RECAP_DISPLAY_MODES.minimal;
 }
 
 export function bannerStartsExpanded(mode: RecapDisplayMode): boolean {
@@ -66,10 +68,22 @@ const UNTRUSTED_TRANSCRIPT_INSTRUCTIONS =
  * drop it. It lowers the rate of recaps in the wrong language but does not
  * end them: `recapNeedsRewrite` checks the result in code.
  */
-const RECAP_CLOSING_INSTRUCTIONS =
-  "Write the recap in the language of the user's most recent messages. That language overrides the language of these instructions, the previous recap, assistant replies, tool output, and code, unless the instructions above require a specific output language. Translate any example wording from the instructions above. Keep file names, symbols, commands, and other identifiers as they are. Before you answer, check your sentence: it must keep to the length requested above and be written in the same language and alphabet as the user's most recent messages. If it does not, rewrite it.";
+function recapClosingInstructions(language: string): string {
+  const shared =
+    "Translate any example wording from the instructions above. Keep file names, symbols, commands, and other identifiers as they are. Before you answer, check your sentence: it must keep to the length requested above and be written";
+  return language
+    ? `Write the recap in ${language}. That language overrides the language of these instructions, the previous recap, the user's messages, assistant replies, tool output, and code. ${shared} in ${language}. If it does not, rewrite it.`
+    : `Write the recap in the language of the user's most recent messages. That language overrides the language of these instructions, the previous recap, assistant replies, tool output, and code, unless the instructions above require a specific output language. ${shared} in the same language and alphabet as the user's most recent messages. If it does not, rewrite it.`;
+}
 
 export const MAX_RECAP_PROMPT_CHARS = 8_000;
+export const MAX_RECAP_LANGUAGE_CHARS = 64;
+
+/** One line of plain text, or empty for the language of the user's messages. */
+export function normalizeRecapLanguage(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.replace(/\s+/g, " ").trim().slice(0, MAX_RECAP_LANGUAGE_CHARS).trim();
+}
 
 export function isBlankRecapPrompt(raw: unknown): boolean {
   return typeof raw !== "string" || raw.trim().length === 0;
@@ -104,6 +118,7 @@ export type RecapFormSnapshot = {
   afterSeconds: number;
   minTurns: number;
   maxConcurrent: number;
+  language: string;
   prompt: string;
 };
 
@@ -117,6 +132,7 @@ export function recapFormIsDirty(
     draft.afterSeconds !== saved.afterSeconds ||
     draft.minTurns !== saved.minTurns ||
     draft.maxConcurrent !== saved.maxConcurrent ||
+    draft.language !== saved.language ||
     draft.prompt !== saved.prompt
   );
 }
@@ -144,15 +160,16 @@ export function buildRecapPrompt(
   transcript: string,
   previousRecap?: string,
   latestUserMessages: string[] = [],
+  language = "",
 ): string {
   const previous = previousRecap?.trim();
   const previousBlock = previous
     ? `\n\nPrevious recap:\n<previous-recap>\n${escapeTranscript(previous)}\n</previous-recap>\n\n${PREVIOUS_RECAP_INSTRUCTIONS}`
     : "";
-  const latestBlock = latestUserMessages.length > 0
+  const latestBlock = latestUserMessages.length > 0 && !language
     ? `\n\n<latest-user-messages>\n${latestUserMessages.map(escapeTranscript).join("\n\n")}\n</latest-user-messages>`
     : "";
-  return `${normalizeRecapPrompt(prompt)}${previousBlock}\n\n${UNTRUSTED_TRANSCRIPT_INSTRUCTIONS}\n\n<session-transcript>\n${escapeTranscript(transcript)}\n</session-transcript>${latestBlock}\n\n${RECAP_CLOSING_INSTRUCTIONS}`;
+  return `${normalizeRecapPrompt(prompt)}${previousBlock}\n\n${UNTRUSTED_TRANSCRIPT_INSTRUCTIONS}\n\n<session-transcript>\n${escapeTranscript(transcript)}\n</session-transcript>${latestBlock}\n\n${recapClosingInstructions(language)}`;
 }
 
 const SCRIPT_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
@@ -547,6 +564,7 @@ export function normalizeRecapSettings(value: unknown): RecapSettingsSnapshot {
     displayMode: parseDisplayMode(
       typeof stored.displayMode === "string" ? stored.displayMode : "",
     ),
+    language: normalizeRecapLanguage(stored.language),
     prompt: normalizeRecapPrompt(stored.prompt),
   };
 }
@@ -567,6 +585,7 @@ export function recapSettingsFormPatch(
     afterSeconds: next.afterSeconds,
     minTurns: next.minTurns,
     maxConcurrent: next.maxConcurrent,
+    language: normalizeRecapLanguage(next.language),
     prompt: normalizeRecapPrompt(next.prompt),
   };
 }
