@@ -115,6 +115,7 @@ export function settingsFormStatusLabel(status: SettingsFormStatus): string {
 export type RecapFormSnapshot = {
   auto: boolean;
   autoCleanup: boolean;
+  headerButton: boolean;
   afterSeconds: number;
   minTurns: number;
   maxConcurrent: number;
@@ -129,6 +130,7 @@ export function recapFormIsDirty(
   return (
     draft.auto !== saved.auto ||
     draft.autoCleanup !== saved.autoCleanup ||
+    draft.headerButton !== saved.headerButton ||
     draft.afterSeconds !== saved.afterSeconds ||
     draft.minTurns !== saved.minTurns ||
     draft.maxConcurrent !== saved.maxConcurrent ||
@@ -533,6 +535,7 @@ export function normalizeRecapSettings(value: unknown): RecapSettingsSnapshot {
       : {};
   return {
     auto: typeof stored.auto === "boolean" ? stored.auto : true,
+    headerButton: stored.headerButton === true,
     autoCleanup:
       typeof stored.autoCleanup === "boolean" ? stored.autoCleanup : true,
     afterSeconds: parseBoundedInteger(
@@ -582,6 +585,7 @@ export function recapSettingsFormPatch(
   return {
     auto: next.auto,
     autoCleanup: next.autoCleanup,
+    headerButton: next.headerButton,
     afterSeconds: next.afterSeconds,
     minTurns: next.minTurns,
     maxConcurrent: next.maxConcurrent,

@@ -21,7 +21,7 @@ Catch Up stores each recap in its own database, so a recap never enters the thre
 bb plugin install git:https://github.com/CrazyCoder/bb-plugin-catchup --yes
 ```
 
-Open a thread and choose **Catch Up** in its header or in the command palette.
+Recaps appear above the composer on their own. To ask for one, use the command palette.
 
 From a local clone:
 
@@ -41,8 +41,8 @@ If you also run the Recap plugin this one is based on, remove it first: otherwis
 
 | Where | What |
 | --- | --- |
-| Thread header | Open the Catch Up panel and generate a recap. |
 | Command palette | Choose **Catch Up: generate a recap for this thread**. |
+| Thread header | Off by default. Turn on **Show in the thread header** in settings to add a Catch Up button. |
 | Composer | Read the latest recap. Choose **On demand** to keep it out of the composer. |
 | Plugin settings | In **Recap behavior**, choose a model and configure automatic generation, cleanup, language, prompt, and display. |
 | CLI | Generate, show, preview, or list recaps with `bb catchup`. |

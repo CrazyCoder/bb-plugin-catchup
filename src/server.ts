@@ -117,6 +117,7 @@ const recapSettingsSchema = z
   .object({
     auto: z.boolean(),
     autoCleanup: z.boolean(),
+    headerButton: z.boolean(),
     afterSeconds: z.number().int().min(0).max(86_400),
     minTurns: z.number().int().min(1).max(100),
     maxConcurrent: z

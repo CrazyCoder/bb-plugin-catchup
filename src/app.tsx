@@ -884,6 +884,22 @@ function SettingsSectionBody() {
               className="mt-0.5 h-4 w-4 accent-foreground"
             />
           </div>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-medium text-foreground">Show in the thread header</p>
+              <p className="text-xs text-muted-foreground">Add a Catch Up button that generates a recap. The command palette and the panel work without it.</p>
+            </div>
+            <input
+              type="checkbox"
+              aria-label="Show in the thread header"
+              checked={draft.headerButton}
+              onChange={(event) => {
+                const headerButton = checkboxFromInput(event);
+                updateDraft((current) => ({ ...current, headerButton }));
+              }}
+              className="mt-0.5 h-4 w-4 accent-foreground"
+            />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-1.5">
               <span className="block font-medium text-foreground">Idle delay (seconds)</span>
@@ -1057,11 +1073,14 @@ export default definePluginApp((app) => {
     icon: "History",
     group: "2_catchup",
     placement: "header",
-    item: ({ experimental_panel }) => ({
-      label: "Catch Up",
-      icon: "History",
-      run: () => openPanelAndGenerate(experimental_panel),
-    }),
+    useData: () => useRecapSettings().settings?.headerButton === true,
+    item: ({ data: visible, experimental_panel }) => visible
+      ? {
+          label: "Catch Up",
+          icon: "History",
+          run: () => openPanelAndGenerate(experimental_panel),
+        }
+      : null,
   });
   app.commands.register({
     id: "generate",

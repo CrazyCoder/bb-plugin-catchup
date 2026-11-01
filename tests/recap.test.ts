@@ -117,6 +117,7 @@ test("treats reverted settings edits as clean", () => {
   const saved = {
     auto: true,
     autoCleanup: true,
+    headerButton: false,
     afterSeconds: 30,
     minTurns: 3,
     maxConcurrent: 2,
@@ -124,6 +125,10 @@ test("treats reverted settings edits as clean", () => {
     prompt: "Write one sentence.",
   };
   assert.equal(recapFormIsDirty(saved, saved), false);
+  assert.equal(recapFormIsDirty({ ...saved, headerButton: true }, saved), true);
+  assert.equal(normalizeRecapSettings({}).headerButton, false);
+  assert.equal(normalizeRecapSettings({ headerButton: true }).headerButton, true);
+  assert.equal(recapSettingsFormPatch({ ...saved, headerButton: true }).headerButton, true);
   assert.equal(recapFormIsDirty({ ...saved, auto: false }, saved), true);
   assert.equal(recapFormIsDirty({ ...saved, language: "Russian" }, saved), true);
   assert.equal(recapFormIsDirty({ ...saved, auto: true }, saved), false);

@@ -5,6 +5,12 @@ All notable changes to Catch Up are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Versions up to 0.2.4 were released
 as [Recap](https://github.com/MacHatter1/bb-recap).
 
+## Unreleased
+
+### Changed
+
+- Hide the Catch Up button in the thread header by default, because header space is shared with other plugins and recaps already appear above the composer. Turn it on with **Show in the thread header** in settings.
+
 ## 0.3.0 - 2026-11-01
 
 ### Changed
