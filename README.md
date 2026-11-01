@@ -119,7 +119,7 @@ bb plugin install path:$PWD --yes
 | **Thread header** | Open the Recap panel and generate a recap. |
 | **Command palette** | Choose **Recap: generate for this thread**. |
 | **Composer** | Read the latest recap inline; choose **On demand** to keep it out of the composer. |
-| **Plugin settings** | In **Recap behavior**, choose a model and configure automatic generation, cleanup, prompt, and display. |
+| **Plugin settings** | In **Recap behavior**, choose a model and configure automatic generation, cleanup, language, prompt, and display. |
 | **CLI** | Generate, show, or list recaps with `bb recap`. |
 
 Automatic generation and cleanup are on by default, and the inline display starts as the Minimal card. The idle delay defaults to 30 seconds, the minimum is 3 user turns, and up to 2 recap workers may run at once. You can set the delay from 0–86,400 seconds, the minimum from 1–100 turns, and concurrency from 1–5 workers. The prompt accepts up to 8,000 characters; recap text is limited to 1,200 characters.
