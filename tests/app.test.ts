@@ -266,6 +266,25 @@ test("a newer recap replaces a preview, and a preview for another thread is igno
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(hook.render().recap?.summary, "Newer");
+
+  recap = null;
+  hook.signal();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap, null);
+});
+
+test("closing a preview in another window closes it here", async () => {
+  const hook = mountRecapHook(async () => ({ recap: null, generating: false, reason: null }));
+  hook.render();
+  hook.signal({ preview: { id: "p", threadId: "t1", summary: "Sample", generatedAt: 100, dismissedAt: null } });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.summary, "Sample");
+  hook.signal({ closePreview: true });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap, null);
 });
 
 test("a failed refresh keeps the recap already on screen", async () => {

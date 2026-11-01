@@ -151,6 +151,9 @@ test("preview falls back to a sample and refuses the On demand mode", async () =
     assert.equal(JSON.parse(out.stdout!).threadId, "empty");
     assert.match(JSON.parse(out.stdout!).summary, /sample recap/);
 
+    assert.deepEqual(await harness.handlers.recap_dismiss({ threadId: "empty", recapId: JSON.parse(out.stdout!).id }), { dismissed: false });
+    assert.deepEqual(harness.published.at(-1), { threadId: "empty", closePreview: true });
+
     await harness.handlers.recap_display_mode_set({ displayMode: "On demand" });
     assert.equal((await harness.cli().run(["preview"], { threadId: "empty" })).exitCode, 1);
   } finally {
