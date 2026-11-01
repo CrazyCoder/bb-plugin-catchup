@@ -281,10 +281,40 @@ test("closing a preview in another window closes it here", async () => {
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(hook.render().recap?.summary, "Sample");
-  hook.signal({ closePreview: true });
+  hook.signal({ closePreview: "older" });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.summary, "Sample");
+  hook.signal({ closePreview: "p" });
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(hook.render().recap, null);
+});
+
+test("a recap held from the previous thread does not end the next thread's preview", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const hook = mountRecapHook(async (_method, input) => {
+    if ((input as { threadId: string }).threadId === "t2") {
+      await gate;
+      return { recap: null, generating: false, reason: null };
+    }
+    return { recap: { id: "a", summary: "Alpha", generatedAt: 500, dismissedAt: null }, generating: false, reason: null };
+  });
+  await hook.render().generate();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.id, "a");
+
+  hook.setThreadId("t2");
+  hook.render();
+  hook.signal({ preview: { id: "p", threadId: "t2", summary: "Sample", generatedAt: 100, dismissedAt: null } });
+  hook.render();
+  hook.render();
+  release();
+  await gate;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.summary, "Sample");
 });
 
 test("a failed refresh keeps the recap already on screen", async () => {

@@ -1004,7 +1004,7 @@ export default async function plugin(bb: BbPluginApi) {
       const { changes } = db
         .prepare(SQL_DISMISS_RECAP)
         .run(Date.now(), recapId, threadId);
-      publishChanged({ threadId, closePreview: true });
+      publishChanged({ threadId, closePreview: recapId });
       return { dismissed: changes > 0 };
     },
     recap_model_get: async () => currentModelSelection(),

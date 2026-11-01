@@ -155,12 +155,13 @@ function useThreadRecap(threadId: string) {
     void reload();
   }, [reload]);
 
+  const previewId = preview?.id ?? null;
   const onSignal = useCallback((payload: unknown) => {
     if (!isRecord(payload) || payload.threadId !== threadId) return;
     if (isRecord(payload.preview)) setPreview(payload.preview as Recap);
-    if (payload.closePreview === true) setPreview(null);
+    else if (payload.closePreview === previewId) setPreview(null);
     void reload();
-  }, [reload, threadId]);
+  }, [previewId, reload, threadId]);
   useRealtime(RECAP_CHANGED, onSignal);
 
   useEffect(() => {
@@ -215,13 +216,11 @@ function useThreadRecap(threadId: string) {
 
   const currentThread = recapThreadId === threadId;
   // A preview outlives the thread's invalidation, until × or a newer recap ends it for good.
+  const threadPreview = currentThread && preview?.threadId === threadId ? preview : null;
   const previewSuperseded =
-    preview !== null && recap !== null && recap.generatedAt > preview.generatedAt;
+    threadPreview !== null && recap !== null && recap.generatedAt > threadPreview.generatedAt;
   if (previewSuperseded) setPreview(null);
-  const activePreview =
-    currentThread && !previewSuperseded && preview?.threadId === threadId
-      ? preview
-      : null;
+  const activePreview = previewSuperseded ? null : threadPreview;
   return {
     recap: activePreview ?? (currentThread ? recap : null),
     dismissed:
