@@ -1,10 +1,16 @@
 # Changelog
 
-All notable changes to Recap are documented here. The format follows
+All notable changes to Catch Up are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
-[Semantic Versioning](https://semver.org/).
+[Semantic Versioning](https://semver.org/). Versions up to 0.2.4 were released
+as [Recap](https://github.com/MacHatter1/bb-recap).
 
-## Unreleased
+## 0.3.0 - 2026-11-01
+
+### Changed
+
+- Rename the plugin to Catch Up, with the plugin ID `catchup` and the command `bb catchup`. `bb recap recap` is `bb catchup generate`; the `summarize` alias is gone.
+- Require bb 0.48 and move to the current thread action, tab, and command APIs.
 
 ### Added
 

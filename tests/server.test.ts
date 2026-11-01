@@ -37,7 +37,7 @@ async function createHarness(options: {
   };
   const thread = (id: string) => ({ id, projectId: "p", environmentId: null, providerId: "p", status: "idle", visibility: "visible" as const, originPluginId: null, originKind: null, parentThreadId: null as string | null });
   const bb = {
-    pluginId: "bb-recap",
+    pluginId: "catchup",
     storage: {
       database: () => db,
       migrate: (_: unknown, statements: string[]) => statements.forEach((statement) => db.exec(statement)),
@@ -393,7 +393,7 @@ test("does not submit a transcript if its thread is hidden during model lookup",
     originPluginId: null,
   });
   const bb = {
-    pluginId: "bb-recap",
+    pluginId: "catchup",
     storage: {
       database: () => db,
       migrate: (_database: Database.Database, statements: string[]) => {
@@ -547,7 +547,7 @@ test("a running child thread keeps its parent active", async () => {
     children = [listedChild({ status: "idle" })];
     assert.ok((await harness.handlers.recap_generate({ threadId: "parent", automatic: false })).recap);
 
-    children = [listedChild({ id: "worker", status: "active", originPluginId: "bb-recap" })];
+    children = [listedChild({ id: "worker", status: "active", originPluginId: "catchup" })];
     harness.activate("parent");
     assert.ok((await harness.handlers.recap_generate({ threadId: "parent", automatic: false })).recap);
 

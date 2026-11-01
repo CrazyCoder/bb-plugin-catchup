@@ -2,16 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import {
   definePluginApp,
   experimental_ProviderModelPicker as ProviderModelPicker,
-  useBbNavigate,
-  useComposerView,
+  useComposer,
   useRealtime,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import type {
+  ExperimentalPanelController,
   ExperimentalProviderModelPickerValue,
+  ExperimentalThreadActionTabProps,
   PluginSettingsSectionProps,
-  PluginThreadHeaderActionProps,
-  PluginThreadPanelProps,
 } from "@get-bb/plugin-sdk/app";
 import {
   DEFAULT_RECAP_PROMPT,
@@ -237,7 +236,7 @@ function useThreadRecap(threadId: string) {
   };
 }
 
-function RecapPanel({ threadId, params }: PluginThreadPanelProps) {
+function RecapPanel({ threadId, params }: ExperimentalThreadActionTabProps) {
   const { recap, generating, loading, error, generate } = useThreadRecap(threadId);
   const requested = isRecord(params) && params.generate === true;
   const requestedAt =
@@ -528,7 +527,7 @@ function RefreshButton({
 }
 
 function RecapComposerBanner() {
-  const { scope } = useComposerView();
+  const { scope } = useComposer();
   const { settings, isLoading } = useRecapSettings();
   const bannerRef = useRef<HTMLDivElement>(null);
   const [isInlineMessageEditor, setIsInlineMessageEditor] = useState(false);
@@ -758,8 +757,8 @@ function SettingsSectionBody() {
     const nextSelection: ModelSelection = {
       providerId: next.providerId,
       model: next.model,
-      reasoningLevel: next.reasoningLevel,
-      ...(next.serviceTier ? { serviceTier: next.serviceTier } : {}),
+      reasoningLevel: next.reasoningLevel as ModelSelection["reasoningLevel"],
+      ...(next.serviceTier ? { serviceTier: next.serviceTier as ModelSelection["serviceTier"] } : {}),
     };
     setSelection(nextSelection);
     setModelSaving(true);
@@ -1025,22 +1024,12 @@ function SettingsSectionBody() {
   );
 }
 
-function RecapHeaderAction({ isCompactViewport }: PluginThreadHeaderActionProps) {
-  const navigate = useBbNavigate();
-  return (
-    <button
-      type="button"
-      className="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-      aria-label="Generate Recap"
-      onClick={() => navigate.openThreadPanel({
-        actionId: "recap",
-        title: "Recap",
-        params: { generate: true, requestedAt: Date.now() },
-      })}
-    >
-      {isCompactViewport ? "✦" : "Recap"}
-    </button>
-  );
+function openPanelAndGenerate(panel: ExperimentalPanelController) {
+  panel.openTab({
+    tab: { id: "recap", context: { kind: "thread" }, availability: "action" },
+    title: "Catch Up",
+    params: { generate: true, requestedAt: Date.now() },
+  });
 }
 
 export default definePluginApp((app) => {
@@ -1054,24 +1043,32 @@ export default definePluginApp((app) => {
     description: "Choose the model, automatic behavior, cleanup, and display previews.",
     component: SettingsSection,
   });
-  app.slots.threadPanelAction({
+  app.slots.experimental_tab({
+    context: { kind: "thread" },
+    availability: "action",
     id: "recap",
-    title: "Recap",
-    icon: "Zap",
+    title: "Catch Up",
+    icon: "History",
     component: RecapPanel,
   });
-  app.slots.experimental_threadHeaderAction({
+  app.slots.experimental_threadAction({
     id: "recap",
-    title: "Recap",
-    component: RecapHeaderAction,
+    title: "Catch Up",
+    icon: "History",
+    group: "2_catchup",
+    placement: "header",
+    item: ({ experimental_panel }) => ({
+      label: "Catch Up",
+      icon: "History",
+      run: () => openPanelAndGenerate(experimental_panel),
+    }),
   });
-  app.slots.commandPaletteAction({
+  app.commands.register({
     id: "generate",
-    title: "Recap: generate for this thread",
+    title: "Catch Up: generate a recap for this thread",
     isAvailable: ({ threadId }) => threadId !== null,
-    run: ({ openPanel, threadId }) => {
-      if (threadId === null) return;
-      openPanel({ actionId: "recap", title: "Recap", params: { generate: true, requestedAt: Date.now() } });
+    run: ({ experimental_panel, threadId }) => {
+      if (threadId !== null) openPanelAndGenerate(experimental_panel);
     },
   });
 });

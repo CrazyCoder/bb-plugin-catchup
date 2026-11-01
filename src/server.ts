@@ -316,7 +316,7 @@ function normalizeModelSelection(
     model: model.model,
     reasoningLevel:
       supported.length > 0 && !supported.includes(selection.reasoningLevel)
-        ? model.defaultReasoningEffort
+        ? (model.defaultReasoningEffort as BbReasoningLevel)
         : selection.reasoningLevel,
     ...(serviceTier ? { serviceTier } : {}),
   };
@@ -581,11 +581,7 @@ export default async function plugin(bb: BbPluginApi) {
         MAX_TRANSCRIPT_CHARS
       )
         break;
-      if (
-        !response.timelinePage.hasOlderRows ||
-        response.timelinePage.olderCursor === null
-      )
-        break;
+      if (response.timelinePage.olderCursor === null) break;
       before = {
         id: response.timelinePage.olderCursor.anchorId,
         seq: response.timelinePage.olderCursor.anchorSeq,
@@ -608,7 +604,7 @@ export default async function plugin(bb: BbPluginApi) {
     return {
       providerId,
       model: model.model,
-      reasoningLevel: model.defaultReasoningEffort,
+      reasoningLevel: model.defaultReasoningEffort as BbReasoningLevel,
     };
   };
 
@@ -1121,11 +1117,10 @@ export default async function plugin(bb: BbPluginApi) {
 
   const usage = [
     "Usage:",
-    "  bb recap recap [thread-id] [--json]",
-    "  bb recap summarize [thread-id] [--json]",
-    "  bb recap show [thread-id] [--json]",
-    "  bb recap preview [thread-id] [--json]",
-    "  bb recap list [--limit N] [--json]",
+    "  bb catchup generate [thread-id] [--json]",
+    "  bb catchup show [thread-id] [--json]",
+    "  bb catchup preview [thread-id] [--json]",
+    "  bb catchup list [--limit N] [--json]",
     "",
     "Leave thread-id out when running from a thread-aware BB CLI context.",
   ].join("\n");
@@ -1135,33 +1130,28 @@ export default async function plugin(bb: BbPluginApi) {
   });
 
   bb.cli.register({
-    name: "recap",
-    summary: "Generate and review concise recaps of BB threads",
+    name: "catchup",
+    summary: "Generate and review short recaps of BB threads",
     commands: [
       {
-        name: "recap",
+        name: "generate",
         summary: "Generate a recap",
-        usage: "bb recap recap [thread-id] [--json]",
-      },
-      {
-        name: "summarize",
-        summary: "Alias for recap",
-        usage: "bb recap summarize [thread-id] [--json]",
+        usage: "bb catchup generate [thread-id] [--json]",
       },
       {
         name: "show",
         summary: "Show the latest recap",
-        usage: "bb recap show [thread-id] [--json]",
+        usage: "bb catchup show [thread-id] [--json]",
       },
       {
         name: "preview",
         summary: "Show the recap card in open BB windows without generating",
-        usage: "bb recap preview [thread-id] [--json]",
+        usage: "bb catchup preview [thread-id] [--json]",
       },
       {
         name: "list",
         summary: "List generated recaps",
-        usage: "bb recap list [--limit N] [--json]",
+        usage: "bb catchup list [--limit N] [--json]",
       },
     ],
     async run(argv, context) {
@@ -1198,7 +1188,7 @@ export default async function plugin(bb: BbPluginApi) {
       }
 
       if (
-        !["recap", "summarize", "show", "preview"].includes(command) ||
+        !["generate", "show", "preview"].includes(command) ||
         args.length > 1
       )
         return cliError("Unknown arguments.");
