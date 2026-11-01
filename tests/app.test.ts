@@ -51,7 +51,7 @@ function mountRecapHook(call: (method: string, input?: unknown) => Promise<unkno
   };
   return {
     render: () => { index = 0; refIndex = 0; return run(...Object.values(environment)); },
-    signal: () => realtime({ threadId: threadIdBox.id }),
+    signal: (extra: Record<string, unknown> = {}) => realtime({ threadId: threadIdBox.id, ...extra }),
     setThreadId: (id: string) => { threadIdBox.id = id; },
   };
 }
@@ -217,9 +217,55 @@ test("an older failed dismissal does not undo a newer one", async () => {
   rejects.get("a")!(new Error("offline"));
   await first;
   assert.equal(hook.render().dismissed, true);
+  assert.equal(hook.render().error, null);
   rejects.get("b")!(new Error("offline"));
   await second;
   assert.equal(hook.render().dismissed, false);
+});
+
+test("a preview shows while the thread has no visible recap and × clears it", async () => {
+  let recap: { id: string; summary: string; generatedAt: number; dismissedAt: null } | null = null;
+  const calls: string[] = [];
+  const hook = mountRecapHook(async (method) => {
+    calls.push(method);
+    return { recap, generating: false, reason: null, dismissed: false };
+  });
+  hook.render();
+  hook.signal({ preview: { id: "p", threadId: "t1", summary: "Sample", generatedAt: 100, dismissedAt: null } });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.summary, "Sample");
+  assert.equal(hook.render().dismissed, false);
+
+  recap = { id: "old", summary: "Older", generatedAt: 50, dismissedAt: null };
+  hook.signal();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.summary, "Sample");
+
+  await hook.render().dismiss("p");
+  assert.equal(hook.render().recap?.summary, "Older");
+  assert.ok(calls.includes("recap_dismiss"));
+});
+
+test("a newer recap replaces a preview, and a preview for another thread is ignored", async () => {
+  let recap: { id: string; summary: string; generatedAt: number; dismissedAt: null } | null = null;
+  const hook = mountRecapHook(async () => ({ recap, generating: false, reason: null }));
+  hook.render();
+  hook.signal({ threadId: "other", preview: { id: "x", threadId: "other", summary: "Other", generatedAt: 1, dismissedAt: null } });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap, null);
+
+  hook.signal({ preview: { id: "p", threadId: "t1", summary: "Sample", generatedAt: 100, dismissedAt: null } });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.summary, "Sample");
+  recap = { id: "new", summary: "Newer", generatedAt: 200, dismissedAt: null };
+  hook.signal();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.summary, "Newer");
 });
 
 test("a failed refresh keeps the recap already on screen", async () => {

@@ -252,6 +252,22 @@ function rowToRecap(row: StoredRecapRow): Recap {
   };
 }
 
+function previewPlaceholder(threadId: string, now: number): Recap {
+  return {
+    id: `preview-${now}`,
+    threadId,
+    summary:
+      "This is a sample recap: this thread has no recap yet, so the card shows placeholder text.",
+    automatic: false,
+    generatedAt: now,
+    turns: 0,
+    lastUserRowId: null,
+    model: "preview",
+    suppressed: false,
+    dismissedAt: null,
+  };
+}
+
 function parseStoredSettings(value: unknown): RecapSettings {
   return normalizeRecapSettings(value);
 }
@@ -1048,6 +1064,7 @@ export default async function plugin(bb: BbPluginApi) {
     "  bb recap recap [thread-id] [--json]",
     "  bb recap summarize [thread-id] [--json]",
     "  bb recap show [thread-id] [--json]",
+    "  bb recap preview [thread-id] [--json]",
     "  bb recap list [--limit N] [--json]",
     "",
     "Leave thread-id out when running from a thread-aware BB CLI context.",
@@ -1075,6 +1092,11 @@ export default async function plugin(bb: BbPluginApi) {
         name: "show",
         summary: "Show the latest recap",
         usage: "bb recap show [thread-id] [--json]",
+      },
+      {
+        name: "preview",
+        summary: "Show the recap card in open BB windows without generating",
+        usage: "bb recap preview [thread-id] [--json]",
       },
       {
         name: "list",
@@ -1115,13 +1137,37 @@ export default async function plugin(bb: BbPluginApi) {
         };
       }
 
-      if (!["recap", "summarize", "show"].includes(command) || args.length > 1)
+      if (
+        !["recap", "summarize", "show", "preview"].includes(command) ||
+        args.length > 1
+      )
         return cliError("Unknown arguments.");
       const threadId = args[0] ?? context.threadId;
       if (!threadId)
         return cliError(
           "A thread id is required outside a thread-aware CLI context.",
         );
+
+      if (command === "preview") {
+        if (config.displayMode === RECAP_DISPLAY_MODES.onDemand)
+          return {
+            exitCode: 1,
+            stderr:
+              "The On demand display mode has no inline recap. Choose another mode in Recap settings.",
+          };
+        // Works while the thread runs: nothing is generated or stored.
+        const stored = latestUsableRecap(threadId);
+        const preview = stored
+          ? { ...stored, dismissedAt: null }
+          : previewPlaceholder(threadId, Date.now());
+        publishChanged({ threadId, preview });
+        return {
+          exitCode: 0,
+          stdout: json
+            ? JSON.stringify(preview)
+            : "Recap preview sent to open BB windows. Close it with ×.",
+        };
+      }
 
       if (command === "show") {
         const recap = latestRecap(threadId);

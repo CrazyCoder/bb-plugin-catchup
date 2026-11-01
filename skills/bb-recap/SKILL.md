@@ -21,6 +21,8 @@ bb recap recap THREAD_ID
 bb recap show THREAD_ID
 ```
 
+When someone asks to preview the recap card, or runs `/recap preview`, use `bb recap preview [THREAD_ID]`. It shows the latest stored recap, or sample text, in open BB windows at once. It generates nothing, stores nothing, and works while the thread is active. It fails in the On demand display mode, which has no inline recap.
+
 Use `bb recap list` to find recent recaps. It lists up to 50 by default; `--limit N` accepts a positive integer up to 100. Add `--json` to any command for machine-readable output. `bb recap summarize` is an alias for `bb recap recap`.
 
 Generation requires the target thread to be visible and idle. Hidden worker threads are not eligible. If the thread is active, or one of its child threads is still running, wait until it is idle before retrying. If no recap exists, `show` reports that none is available. A new turn hides the previous recap until a fresh one is generated.

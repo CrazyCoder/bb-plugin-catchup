@@ -18,6 +18,7 @@ Automatic recaps and auto-cleanup are on by default. The idle delay defaults to 
 ```sh
 bb recap recap [thread-id] [--json]
 bb recap summarize [thread-id] [--json]
+bb recap preview [thread-id] [--json]
 bb recap show [thread-id] [--json]
 bb recap list [--limit N] [--json]
 ```

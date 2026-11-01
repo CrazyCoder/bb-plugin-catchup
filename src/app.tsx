@@ -105,6 +105,7 @@ function useThreadRecap(threadId: string) {
   const [readError, setReadError] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [dismissedRecapId, setDismissedRecapId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Recap | null>(null);
   const threadEpoch = useRef(0);
   const epochThreadId = useRef(threadId);
   const reloadSeq = useRef(0);
@@ -155,11 +156,16 @@ function useThreadRecap(threadId: string) {
   }, [reload]);
 
   const onSignal = useCallback((payload: unknown) => {
-    if (isRecord(payload) && payload.threadId === threadId) void reload();
+    if (!isRecord(payload) || payload.threadId !== threadId) return;
+    if (isRecord(payload.preview)) setPreview(payload.preview as Recap);
+    void reload();
   }, [reload, threadId]);
   useRealtime(RECAP_CHANGED, onSignal);
 
-  useEffect(() => { setGenerationError(null); }, [threadId]);
+  useEffect(() => {
+    setGenerationError(null);
+    setPreview(null);
+  }, [threadId]);
 
   const generate = useCallback(async () => {
     const epoch = threadEpoch.current;
@@ -191,13 +197,15 @@ function useThreadRecap(threadId: string) {
   const dismiss = useCallback(async (recapId: string) => {
     const epoch = threadEpoch.current;
     const seq = ++dismissSeq.current;
+    setPreview(null);
     setDismissedRecapId(recapId);
     setGenerationError(null);
     try {
       await rpc.call("recap_dismiss", { threadId, recapId });
     } catch (cause) {
+      if (seq !== dismissSeq.current) return;
       // Roll back after a thread switch too, or the recap stays hidden on return.
-      if (seq === dismissSeq.current) setDismissedRecapId(null);
+      setDismissedRecapId(null);
       if (epoch === threadEpoch.current) {
         setGenerationError(cause instanceof Error ? cause.message : String(cause));
       }
@@ -205,9 +213,17 @@ function useThreadRecap(threadId: string) {
   }, [rpc, threadId]);
 
   const currentThread = recapThreadId === threadId;
+  // A preview outlives the thread's invalidation, until × or a newer recap replaces it.
+  const activePreview =
+    currentThread &&
+    preview?.threadId === threadId &&
+    !(recap && recap.generatedAt > preview.generatedAt)
+      ? preview
+      : null;
   return {
-    recap: currentThread ? recap : null,
+    recap: activePreview ?? (currentThread ? recap : null),
     dismissed:
+      activePreview === null &&
       currentThread &&
       recap !== null &&
       (recap.dismissedAt != null || recap.id === dismissedRecapId),

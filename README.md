@@ -162,6 +162,7 @@ bb recap list                  # List recent recaps
 | `bb recap recap [thread-id] [--json]` | Generate a recap. |
 | `bb recap summarize [thread-id] [--json]` | Alias for `recap`. |
 | `bb recap show [thread-id] [--json]` | Show the latest valid recap. |
+| `bb recap preview [thread-id] [--json]` | Show the latest stored recap, or sample text, as a card in open BB windows. Generates and stores nothing. |
 | `bb recap list [--limit N] [--json]` | List recaps; the default limit is 50 and the maximum is 100. |
 
 Leave out `thread-id` in a thread-aware BB CLI context. Generation requires a visible, idle thread. A thread with a child thread still running is still active. Hidden worker threads are not eligible. Add `--json` to any command for JSON output.

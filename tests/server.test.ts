@@ -23,6 +23,8 @@ async function createHarness(options: {
   const settings = { auto: true, autoCleanup: true, afterSeconds: 86_400, minTurns: 1, maxConcurrent: 1, displayMode: "Compact banner", prompt: "Return a recap." } as RecapSettings;
   const events = new Map<string, (payload: unknown) => void>();
   const spawned: Array<{ prompt: string; reasoningLevel: string; serviceTier?: string }> = [];
+  const published: Array<Record<string, unknown>> = [];
+  let cli!: { run: (argv: string[], context: { threadId?: string }) => Promise<{ exitCode: number; stdout?: string; stderr?: string }> };
   let dispose!: () => Promise<void>;
   let handlers!: {
     recap_generate: (input: { threadId: string; automatic: boolean }) => Promise<{ recap: Recap | null; reason: string | null }>;
@@ -56,8 +58,8 @@ async function createHarness(options: {
       providers: { models: async () => ({ models: [{ id: "m", model: "m", supportedReasoningEfforts: [{ reasoningEffort: "low" }], defaultReasoningEffort: "low" }], providers: [{ id: "p" }] }) },
     },
     rpc: { register: (_: unknown, registered: typeof handlers) => { handlers = registered; } },
-    cli: { register: () => {} }, events: { on: (name: string, callback: (payload: unknown) => void) => { events.set(name, callback); } },
-    realtime: { publish: () => {} }, log: { info: () => {}, warn: () => {} }, onDispose: (callback: typeof dispose) => { dispose = callback; },
+    cli: { register: (registered: typeof cli) => { cli = registered; } }, events: { on: (name: string, callback: (payload: unknown) => void) => { events.set(name, callback); } },
+    realtime: { publish: (_: string, payload: Record<string, unknown>) => { published.push(payload); } }, log: { info: () => {}, warn: () => {} }, onDispose: (callback: typeof dispose) => { dispose = callback; },
   } as unknown as BbPluginApi;
   await plugin(bb);
   return {
@@ -65,6 +67,8 @@ async function createHarness(options: {
     settings,
     handlers,
     spawned,
+    published,
+    cli: () => cli,
     activate: (id: string) => events.get("thread.active")?.({ thread: { ...thread(id), status: "running" } }),
     emit: (name: string, payload: { thread: Record<string, unknown> }) => events.get(name)?.(payload),
     close: async () => { await dispose(); db.close(); },
@@ -114,6 +118,41 @@ test("a dismissed recap still blocks a duplicate automatic recap for the same tu
     const again = await harness.handlers.recap_generate({ threadId: "A", automatic: true });
     assert.equal(again.reason, "already_exists");
     assert.equal(harness.spawned.length, 1);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("preview publishes the latest recap without generating, even after invalidation or dismissal", async () => {
+  const harness = await createHarness();
+  try {
+    const recap = (await harness.handlers.recap_generate({ threadId: "A", automatic: false })).recap!;
+    await harness.handlers.recap_dismiss({ threadId: "A", recapId: recap.id });
+    harness.activate("A");
+    assert.equal((await harness.handlers.recap_get({ threadId: "A" })).recap, null);
+
+    const out = await harness.cli().run(["preview"], { threadId: "A" });
+    assert.equal(out.exitCode, 0);
+    const sent = harness.published.at(-1) as { threadId: string; preview: Recap };
+    assert.equal(sent.threadId, "A");
+    assert.equal(sent.preview.id, recap.id);
+    assert.equal(sent.preview.dismissedAt, null);
+    assert.equal(harness.spawned.length, 1);
+    assert.equal((await harness.handlers.recap_get({ threadId: "A" })).recap, null);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("preview falls back to a sample and refuses the On demand mode", async () => {
+  const harness = await createHarness();
+  try {
+    const out = await harness.cli().run(["preview", "--json"], { threadId: "empty" });
+    assert.equal(JSON.parse(out.stdout!).threadId, "empty");
+    assert.match(JSON.parse(out.stdout!).summary, /sample recap/);
+
+    await harness.handlers.recap_display_mode_set({ displayMode: "On demand" });
+    assert.equal((await harness.cli().run(["preview"], { threadId: "empty" })).exitCode, 1);
   } finally {
     await harness.close();
   }
