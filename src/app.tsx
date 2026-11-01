@@ -155,13 +155,13 @@ function useThreadRecap(threadId: string) {
     void reload();
   }, [reload]);
 
-  const previewId = preview?.id ?? null;
   const onSignal = useCallback((payload: unknown) => {
     if (!isRecord(payload) || payload.threadId !== threadId) return;
     if (isRecord(payload.preview)) setPreview(payload.preview as Recap);
-    else if (payload.closePreview === previewId) setPreview(null);
+    const closed = payload.closePreview;
+    if (typeof closed === "string") setPreview((current) => (current?.id === closed ? null : current));
     void reload();
-  }, [previewId, reload, threadId]);
+  }, [reload, threadId]);
   useRealtime(RECAP_CHANGED, onSignal);
 
   useEffect(() => {

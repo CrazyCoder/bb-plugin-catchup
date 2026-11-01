@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import { MAX_AUTOMATIC_RAW_RECAP_CHARS } from "../src/recap.ts";
+import { DEFAULT_RECAP_PROMPT, MAX_AUTOMATIC_RAW_RECAP_CHARS } from "../src/recap.ts";
 import plugin from "../src/server.ts";
 import type { Recap, RecapSettings } from "../src/server.ts";
 
@@ -16,11 +16,12 @@ async function createHarness(options: {
   timeline?: (args: { threadId: string; beforeAnchorSeq?: string }) => Promise<unknown>;
   wait?: (threadId: string) => Promise<void>;
   database?: Database.Database;
+  prompt?: string;
   output?: string | string[];
   listThreads?: (args: { parentThreadId?: string }) => Promise<unknown[]>;
 } = {}) {
   const db = options.database ?? new Database(":memory:");
-  const settings = { auto: true, autoCleanup: true, afterSeconds: 86_400, minTurns: 1, maxConcurrent: 1, displayMode: "Compact banner", prompt: "Return a recap." } as RecapSettings;
+  const settings = { auto: true, autoCleanup: true, afterSeconds: 86_400, minTurns: 1, maxConcurrent: 1, displayMode: "Compact banner", prompt: options.prompt ?? "Return a recap." } as RecapSettings;
   const events = new Map<string, (payload: unknown) => void>();
   const spawned: Array<{ prompt: string; reasoningLevel: string; serviceTier?: string }> = [];
   const published: Array<Record<string, unknown>> = [];
@@ -177,7 +178,7 @@ const ENGLISH_RECAP = "You asked why the settings page stopped scrolling and we 
 const RUSSIAN_RECAP = "Ты спросил, почему не скроллится страница настроек, и мы нашли причину.";
 
 test("an English recap in a Russian thread is rewritten by a worker without the transcript", async () => {
-  const harness = await createHarness({ timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, RUSSIAN_RECAP] });
+  const harness = await createHarness({ prompt: DEFAULT_RECAP_PROMPT, timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, RUSSIAN_RECAP] });
   try {
     const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
     assert.equal(recap?.summary, RUSSIAN_RECAP);
@@ -190,7 +191,7 @@ test("an English recap in a Russian thread is rewritten by a worker without the 
 });
 
 test("a Russian recap in an English thread is rewritten too", async () => {
-  const harness = await createHarness({ timeline: talking(ENGLISH_USER), output: [RUSSIAN_RECAP, ENGLISH_RECAP] });
+  const harness = await createHarness({ prompt: DEFAULT_RECAP_PROMPT, timeline: talking(ENGLISH_USER), output: [RUSSIAN_RECAP, ENGLISH_RECAP] });
   try {
     const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
     assert.equal(recap?.summary, ENGLISH_RECAP);
@@ -200,7 +201,7 @@ test("a Russian recap in an English thread is rewritten too", async () => {
 });
 
 test("a recap already in the user's script takes no second worker", async () => {
-  const harness = await createHarness({ timeline: talking(RUSSIAN_USER), output: [RUSSIAN_RECAP] });
+  const harness = await createHarness({ prompt: DEFAULT_RECAP_PROMPT, timeline: talking(RUSSIAN_USER), output: [RUSSIAN_RECAP] });
   try {
     const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
     assert.equal(recap?.summary, RUSSIAN_RECAP);
@@ -210,9 +211,20 @@ test("a recap already in the user's script takes no second worker", async () => 
   }
 });
 
-test("a rewrite that is empty or still in the wrong script keeps the first recap", async () => {
-  for (const second of ["", ENGLISH_RECAP]) {
-    const harness = await createHarness({ timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, second] });
+test("a custom prompt is free to choose the language", async () => {
+  const harness = await createHarness({ prompt: "Always answer in English.", timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, RUSSIAN_RECAP] });
+  try {
+    const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    assert.equal(recap?.summary, ENGLISH_RECAP);
+    assert.equal(harness.spawned.length, 1);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("a rewrite that is empty, unusable, oversized, or still in the wrong script keeps the first recap", async () => {
+  for (const second of ["", "Summary:", "ч ".repeat(MAX_AUTOMATIC_RAW_RECAP_CHARS), ENGLISH_RECAP]) {
+    const harness = await createHarness({ prompt: DEFAULT_RECAP_PROMPT, timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, second] });
     try {
       const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
       assert.equal(recap?.summary, ENGLISH_RECAP);

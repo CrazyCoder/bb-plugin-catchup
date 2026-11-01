@@ -16,7 +16,9 @@ import {
   MAX_TRANSCRIPT_CHARS,
   parsePositiveInteger,
   recapNeedsRewrite,
+  recapRewriteIsUsable,
   createGenerationLimiter,
+  DEFAULT_RECAP_PROMPT,
   GENERATION_REASONS,
   isRunningThreadStatus,
   isVisibleThread,
@@ -719,8 +721,7 @@ export default async function plugin(bb: BbPluginApi) {
         execution,
         signal,
       );
-      return rewritten.trim() !== "" &&
-        !recapNeedsRewrite(rewritten, latestUserMessages)
+      return recapRewriteIsUsable(rewritten, raw, latestUserMessages)
         ? rewritten
         : raw;
     } catch (error) {
@@ -789,13 +790,18 @@ export default async function plugin(bb: BbPluginApi) {
       input.previousRecap,
       input.latestUserMessages,
     );
-    const raw = await inUserLanguage(
-      await runWorker(beforeWorker, prompt, execution, signal),
-      input.latestUserMessages,
-      beforeWorker,
-      execution,
-      signal,
-    );
+    const first = await runWorker(beforeWorker, prompt, execution, signal);
+    // A custom prompt may require a specific language, so only the default is checked.
+    const raw =
+      config.prompt === DEFAULT_RECAP_PROMPT
+        ? await inUserLanguage(
+            first,
+            input.latestUserMessages,
+            beforeWorker,
+            execution,
+            signal,
+          )
+        : first;
     if (signal?.aborted) return result("aborted", turns);
     const summary = cleanRecapText(raw);
     if (summary === "") return result("empty_model_response", turns);

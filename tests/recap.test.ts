@@ -509,6 +509,10 @@ test("finds the script of the prose and ignores identifiers", () => {
   assert.equal(dominantScript("設定ページがスクロールしない理由を調べました"), "CJK");
   assert.equal(dominantScript("да ok"), null);
   assert.equal(dominantScript("settings страница"), null);
+  assert.equal(
+    dominantScript("Мы исправили refreshToken и handleAuthenticationFailure, добавили retryAuthentication и проверили результат."),
+    "Cyrillic",
+  );
 });
 
 test("asks for a rewrite only when both scripts are known and differ", () => {

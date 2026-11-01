@@ -14,7 +14,7 @@ All notable changes to Recap are documented here. The format follows
 ### Fixed
 
 - Write recaps in the language of the user's latest messages. The rule now follows the transcript, outside the editable prompt, together with a sample of those messages, so English tool output, a previous English recap, or a saved prompt no longer sets the language. Settings that hold the former default prompt move to the new default.
-- Check each recap against the writing system of the user's latest messages. On a mismatch, a second short worker rewrites the sentence, without the transcript. Languages that share a script, such as English and German, are not told apart.
+- With the default prompt, check each recap against the writing system of the user's latest messages. On a mismatch, a second short worker rewrites the sentence, without the transcript. Languages that share a script, such as English and German, are not told apart.
 - Raise the size limit for automatic recaps from 500 to 800 raw characters, so recaps in languages with longer words than English are not dropped without notice.
 
 ## 0.2.4 - 2026-10-09

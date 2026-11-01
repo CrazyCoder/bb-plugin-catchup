@@ -25,7 +25,9 @@ function mountRecapHook(call: (method: string, input?: unknown) => Promise<unkno
     useState: (initial: unknown) => {
       const slot = index++;
       if (!(slot in states)) states[slot] = initial;
-      return [states[slot], (value: unknown) => { states[slot] = value; }];
+      return [states[slot], (value: unknown) => {
+        states[slot] = typeof value === "function" ? value(states[slot]) : value;
+      }];
     },
     useRef: (initial: unknown) => {
       const slot = refIndex++;
@@ -286,6 +288,24 @@ test("closing a preview in another window closes it here", async () => {
   await Promise.resolve();
   assert.equal(hook.render().recap?.summary, "Sample");
   hook.signal({ closePreview: "p" });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap, null);
+});
+
+test("close signals compare with the newest preview even without a render between them", async () => {
+  const hook = mountRecapHook(async () => ({ recap: null, generating: false, reason: null }));
+  const sample = (id: string) => ({ id, threadId: "t1", summary: id, generatedAt: 100, dismissedAt: null });
+  hook.render();
+  hook.signal({ preview: sample("a") });
+  hook.render();
+  hook.signal({ preview: sample("b") });
+  hook.signal({ closePreview: "a" });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().recap?.id, "b");
+  hook.signal({ preview: sample("c") });
+  hook.signal({ closePreview: "c" });
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(hook.render().recap, null);

@@ -176,7 +176,10 @@ const MIN_SCRIPT_LETTERS = 10;
  * Languages that share a script are not told apart.
  */
 export function dominantScript(text: string): string | null {
-  const prose = text.replace(/```[\s\S]*?```|`[^`]*`|\S*[/\\._=:#@-]\S*/g, " ");
+  const prose = text.replace(
+    /```[\s\S]*?```|`[^`]*`|\S*[A-Za-z0-9][/\\._=:#@-][A-Za-z0-9]\S*|\b[a-z]+[A-Z]\w*/g,
+    " ",
+  );
   const counts = SCRIPT_PATTERNS.map(
     ([script, pattern]) => [script, prose.match(pattern)?.length ?? 0] as const,
   );
@@ -192,6 +195,19 @@ export function recapNeedsRewrite(raw: string, latestUserMessages: string[]): bo
   const expected = dominantScript(latestUserMessages.join("\n"));
   const actual = dominantScript(raw);
   return expected !== null && actual !== null && actual !== expected;
+}
+
+/** A translation replaces the recap only if it fixes the script and costs nothing else. */
+export function recapRewriteIsUsable(
+  rewritten: string,
+  raw: string,
+  latestUserMessages: string[],
+): boolean {
+  return (
+    cleanRecapText(rewritten) !== "" &&
+    dominantScript(rewritten) === dominantScript(latestUserMessages.join("\n")) &&
+    rewritten.length <= Math.max(raw.length, MAX_AUTOMATIC_RAW_RECAP_CHARS)
+  );
 }
 
 /** Carries no transcript, so the session's language cannot pull the result back. */
