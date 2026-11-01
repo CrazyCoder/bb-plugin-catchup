@@ -6,7 +6,7 @@ import * as recapHelpers from "../src/recap.ts";
 
 // Exercise the production hook's async RPC flow without requiring a BB host or DOM.
 // Hook stubs keep state between renders and expose the realtime subscription.
-function mountRecapHook(call: (method: string) => Promise<unknown>) {
+function mountRecapHook(call: (method: string, input?: unknown) => Promise<unknown>) {
   const source = readFileSync(new URL("../src/app.tsx", import.meta.url), "utf8");
   const hook = source.slice(source.indexOf("function useThreadRecap"), source.indexOf("\nfunction RecapPanel"));
   const messageStart = source.indexOf("function generationErrorMessage");
@@ -174,6 +174,52 @@ test("a failed dismissal restores the recap and reports the error", async () => 
   const view = hook.render();
   assert.equal(view.dismissed, false);
   assert.equal(view.error, "offline");
+});
+
+test("a dismissal that fails after a thread switch does not leave the recap hidden", async () => {
+  let reject!: (cause: Error) => void;
+  const hook = mountRecapHook(async (method) => {
+    if (method === "recap_dismiss") return new Promise((_, fail) => { reject = fail; });
+    return { recap: { id: "a", summary: "Alpha", dismissedAt: null }, generating: false, reason: null };
+  });
+  await hook.render().generate();
+  await Promise.resolve();
+  const pending = hook.render().dismiss("a");
+  hook.setThreadId("t2");
+  hook.render();
+  reject(new Error("offline"));
+  await pending;
+  hook.setThreadId("t1");
+  await hook.render().generate();
+  await Promise.resolve();
+  const view = hook.render();
+  assert.equal(view.dismissed, false);
+  assert.equal(view.recap?.id, "a");
+});
+
+test("an older failed dismissal does not undo a newer one", async () => {
+  const rejects = new Map<string, (cause: Error) => void>();
+  let recapId = "a";
+  const hook = mountRecapHook(async (method, input) => {
+    if (method === "recap_dismiss") {
+      return new Promise((_, fail) => { rejects.set((input as { recapId: string }).recapId, fail); });
+    }
+    return { recap: { id: recapId, summary: recapId, dismissedAt: null }, generating: false, reason: null };
+  });
+  await hook.render().generate();
+  await Promise.resolve();
+  const first = hook.render().dismiss("a");
+  recapId = "b";
+  await hook.render().generate();
+  await Promise.resolve();
+  const second = hook.render().dismiss("b");
+  await Promise.resolve();
+  rejects.get("a")!(new Error("offline"));
+  await first;
+  assert.equal(hook.render().dismissed, true);
+  rejects.get("b")!(new Error("offline"));
+  await second;
+  assert.equal(hook.render().dismissed, false);
 });
 
 test("a failed refresh keeps the recap already on screen", async () => {

@@ -108,6 +108,7 @@ function useThreadRecap(threadId: string) {
   const threadEpoch = useRef(0);
   const epochThreadId = useRef(threadId);
   const reloadSeq = useRef(0);
+  const dismissSeq = useRef(0);
   const ownedThreadId = useRef(threadId);
   if (epochThreadId.current !== threadId) {
     epochThreadId.current = threadId;
@@ -189,14 +190,17 @@ function useThreadRecap(threadId: string) {
 
   const dismiss = useCallback(async (recapId: string) => {
     const epoch = threadEpoch.current;
+    const seq = ++dismissSeq.current;
     setDismissedRecapId(recapId);
     setGenerationError(null);
     try {
       await rpc.call("recap_dismiss", { threadId, recapId });
     } catch (cause) {
-      if (epoch !== threadEpoch.current) return;
-      setDismissedRecapId(null);
-      setGenerationError(cause instanceof Error ? cause.message : String(cause));
+      // Roll back after a thread switch too, or the recap stays hidden on return.
+      if (seq === dismissSeq.current) setDismissedRecapId(null);
+      if (epoch === threadEpoch.current) {
+        setGenerationError(cause instanceof Error ? cause.message : String(cause));
+      }
     }
   }, [rpc, threadId]);
 
@@ -295,10 +299,8 @@ function RecapComposerBannerContent({
     setExpanded(bannerStartsExpanded(mode));
   }, [mode, recap?.id, threadId]);
 
-  if (dismissed) return null;
-
-  if (!recap) {
-    if (!generating) {
+  if (!recap || dismissed) {
+    if (!generating || dismissed) {
       if (!error) return null;
       return (
         <div
