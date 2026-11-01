@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-catchup",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Short recaps above the composer, so you can pick up a BB thread without rereading it",
   "repository": {
     "type": "git",
