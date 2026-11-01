@@ -16,7 +16,7 @@ async function createHarness(options: {
   timeline?: (args: { threadId: string; beforeAnchorSeq?: string }) => Promise<unknown>;
   wait?: (threadId: string) => Promise<void>;
   database?: Database.Database;
-  output?: string;
+  output?: string | string[];
   listThreads?: (args: { parentThreadId?: string }) => Promise<unknown[]>;
 } = {}) {
   const db = options.database ?? new Database(":memory:");
@@ -53,7 +53,12 @@ async function createHarness(options: {
         })),
         spawn: async (input: (typeof spawned)[number]) => { spawned.push(input); return { id: String(spawned.length) }; },
         wait: async ({ threadId }: { threadId: string }) => { await options.wait?.(threadId); return {}; },
-        output: async () => ({ output: options.output ?? "We did work." }), archive: async () => {}, stop: async () => {},
+        output: async ({ threadId }: { threadId: string }) => ({
+          output: Array.isArray(options.output)
+            ? options.output[Number(threadId) - 1]
+            : options.output ?? "We did work.",
+        }),
+        archive: async () => {}, stop: async () => {},
       },
       providers: { models: async () => ({ models: [{ id: "m", model: "m", supportedReasoningEfforts: [{ reasoningEffort: "low" }], defaultReasoningEffort: "low" }], providers: [{ id: "p" }] }) },
     },
@@ -159,6 +164,61 @@ test("preview falls back to a sample and refuses the On demand mode", async () =
     assert.equal((await harness.cli().run(["preview"], { threadId: "empty" })).exitCode, 1);
   } finally {
     await harness.close();
+  }
+});
+
+const talking = (text: string) => async () => ({
+  rows: [{ id: "u1", kind: "conversation", role: "user", threadId: "A", text }],
+  timelinePage: { hasOlderRows: false, olderCursor: null },
+});
+const RUSSIAN_USER = "Почему страница настроек не скроллится?";
+const ENGLISH_USER = "Why did the settings page stop scrolling?";
+const ENGLISH_RECAP = "You asked why the settings page stopped scrolling and we found the cause.";
+const RUSSIAN_RECAP = "Ты спросил, почему не скроллится страница настроек, и мы нашли причину.";
+
+test("an English recap in a Russian thread is rewritten by a worker without the transcript", async () => {
+  const harness = await createHarness({ timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, RUSSIAN_RECAP] });
+  try {
+    const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    assert.equal(recap?.summary, RUSSIAN_RECAP);
+    assert.equal(harness.spawned.length, 2);
+    assert.match(harness.spawned[1].prompt, /<recap>\nYou asked why/);
+    assert.doesNotMatch(harness.spawned[1].prompt, /<session-transcript>/);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("a Russian recap in an English thread is rewritten too", async () => {
+  const harness = await createHarness({ timeline: talking(ENGLISH_USER), output: [RUSSIAN_RECAP, ENGLISH_RECAP] });
+  try {
+    const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    assert.equal(recap?.summary, ENGLISH_RECAP);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("a recap already in the user's script takes no second worker", async () => {
+  const harness = await createHarness({ timeline: talking(RUSSIAN_USER), output: [RUSSIAN_RECAP] });
+  try {
+    const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    assert.equal(recap?.summary, RUSSIAN_RECAP);
+    assert.equal(harness.spawned.length, 1);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("a rewrite that is empty or still in the wrong script keeps the first recap", async () => {
+  for (const second of ["", ENGLISH_RECAP]) {
+    const harness = await createHarness({ timeline: talking(RUSSIAN_USER), output: [ENGLISH_RECAP, second] });
+    try {
+      const { recap } = await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+      assert.equal(recap?.summary, ENGLISH_RECAP);
+    } finally {
+      await harness.close();
+    }
   }
 });
 

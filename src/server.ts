@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   buildConversationText,
   buildRecapPrompt,
+  buildRecapRewritePrompt,
   buildRecapWorkerInput,
   cleanRecapText,
   countUserTurns,
@@ -14,6 +15,7 @@ import {
   MAX_RECAP_PROMPT_CHARS,
   MAX_TRANSCRIPT_CHARS,
   parsePositiveInteger,
+  recapNeedsRewrite,
   createGenerationLimiter,
   GENERATION_REASONS,
   isRunningThreadStatus,
@@ -194,6 +196,13 @@ type ThreadSnapshot = {
   originPluginId: string | null;
   originKind?: "fork" | null;
   parentThreadId?: string | null;
+};
+
+type WorkerExecution = {
+  providerId: string;
+  model: string;
+  reasoningLevel: BbReasoningLevel;
+  serviceTier?: BbServiceTier;
 };
 
 type ThreadState = {
@@ -655,17 +664,8 @@ export default async function plugin(bb: BbPluginApi) {
 
   const runWorker = async (
     thread: ThreadSnapshot,
-    input: {
-      transcript: string;
-      previousRecap?: string;
-      latestUserMessages: string[];
-    },
-    execution: {
-      providerId: string;
-      model: string;
-      reasoningLevel: BbReasoningLevel;
-      serviceTier?: BbServiceTier;
-    },
+    prompt: string,
+    execution: WorkerExecution,
     signal?: AbortSignal,
   ): Promise<string> => {
     if (signal?.aborted) return "";
@@ -681,12 +681,7 @@ export default async function plugin(bb: BbPluginApi) {
       permissionMode: RECAP_WORKER_PERMISSION_MODE,
       title: "Recap worker",
       visibility: "hidden",
-      prompt: buildRecapPrompt(
-        config.prompt,
-        input.transcript,
-        input.previousRecap,
-        input.latestUserMessages,
-      ),
+      prompt,
     });
 
     try {
@@ -704,6 +699,35 @@ export default async function plugin(bb: BbPluginApi) {
       );
     } finally {
       await disposeWorker(worker.id);
+    }
+  };
+
+  // The prompt asks for the user's language, but the model does not follow it
+  // reliably in either direction, so the result is checked here.
+  const inUserLanguage = async (
+    raw: string,
+    latestUserMessages: string[],
+    thread: ThreadSnapshot,
+    execution: WorkerExecution,
+    signal?: AbortSignal,
+  ): Promise<string> => {
+    if (!recapNeedsRewrite(raw, latestUserMessages)) return raw;
+    try {
+      const rewritten = await runWorker(
+        thread,
+        buildRecapRewritePrompt(raw, latestUserMessages),
+        execution,
+        signal,
+      );
+      return rewritten.trim() !== "" &&
+        !recapNeedsRewrite(rewritten, latestUserMessages)
+        ? rewritten
+        : raw;
+    } catch (error) {
+      logWarning(
+        `Recap language rewrite failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return raw;
     }
   };
 
@@ -759,7 +783,19 @@ export default async function plugin(bb: BbPluginApi) {
     }
     if (signal?.aborted) return result("aborted", turns);
     if (automatic && !config.auto) return result("automatic_disabled", turns);
-    const raw = await runWorker(beforeWorker, input, execution, signal);
+    const prompt = buildRecapPrompt(
+      config.prompt,
+      input.transcript,
+      input.previousRecap,
+      input.latestUserMessages,
+    );
+    const raw = await inUserLanguage(
+      await runWorker(beforeWorker, prompt, execution, signal),
+      input.latestUserMessages,
+      beforeWorker,
+      execution,
+      signal,
+    );
     if (signal?.aborted) return result("aborted", turns);
     const summary = cleanRecapText(raw);
     if (summary === "") return result("empty_model_response", turns);
