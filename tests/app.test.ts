@@ -43,6 +43,8 @@ function mountRecapHook(call: (method: string) => Promise<unknown>) {
   }).outputText;
   const run = new Function(...Object.keys(environment), compiled) as (...args: unknown[]) => {
     generate: () => Promise<void>;
+    dismiss: (recapId: string) => Promise<void>;
+    dismissed: boolean;
     error: string | null;
     recap: { id?: string; summary?: string } | null;
     generating: boolean;
@@ -127,6 +129,51 @@ test("keeps a generation failure when a refresh arrives while it is in flight", 
   const view = hook.render();
   assert.equal(view.error, "provider failure");
   assert.equal(view.recap?.summary, "Old");
+});
+
+test("dismissing hides the recap at once and a stale read cannot bring it back", async () => {
+  const dismissals: unknown[] = [];
+  const hook = mountRecapHook(async (method) => {
+    if (method === "recap_dismiss") { dismissals.push(method); return { dismissed: true }; }
+    return { recap: { id: "a", summary: "Alpha", dismissedAt: null }, generating: false, reason: null };
+  });
+  await hook.render().generate();
+  await Promise.resolve();
+  assert.equal(hook.render().dismissed, false);
+  const pending = hook.render().dismiss("a");
+  assert.equal(hook.render().dismissed, true);
+  await pending;
+  hook.signal();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().dismissed, true);
+  assert.equal(dismissals.length, 1);
+});
+
+test("a recap dismissed elsewhere stays hidden and a newer recap is shown", async () => {
+  let recap = { id: "a", summary: "Alpha", dismissedAt: 123 as number | null };
+  const hook = mountRecapHook(async () => ({ recap, generating: false, reason: null }));
+  await hook.render().generate();
+  await Promise.resolve();
+  assert.equal(hook.render().dismissed, true);
+  recap = { id: "b", summary: "Beta", dismissedAt: null };
+  hook.signal();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(hook.render().dismissed, false);
+});
+
+test("a failed dismissal restores the recap and reports the error", async () => {
+  const hook = mountRecapHook(async (method) => {
+    if (method === "recap_dismiss") throw new Error("offline");
+    return { recap: { id: "a", summary: "Alpha", dismissedAt: null }, generating: false, reason: null };
+  });
+  await hook.render().generate();
+  await Promise.resolve();
+  await hook.render().dismiss("a");
+  const view = hook.render();
+  assert.equal(view.dismissed, false);
+  assert.equal(view.error, "offline");
 });
 
 test("a failed refresh keeps the recap already on screen", async () => {

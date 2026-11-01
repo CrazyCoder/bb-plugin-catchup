@@ -9,6 +9,7 @@ import {
   countUserTurns,
   GENERATION_REASON_OPTIONS,
   latestUserRowId,
+  MAX_AUTOMATIC_RAW_RECAP_CHARS,
   MAX_RECAP_CHARS,
   MAX_RECAP_PROMPT_CHARS,
   MAX_TRANSCRIPT_CHARS,
@@ -27,9 +28,11 @@ import {
   shouldRetryAutomaticRecap,
   SQL_CLEANUP_RECAPS,
   SQL_ADD_RECAP_CURSOR,
+  SQL_ADD_RECAP_DISMISSED,
   SQL_CREATE_INVALIDATIONS,
   SQL_CREATE_RECAPS,
   SQL_CREATE_RECAPS_INDEX,
+  SQL_DISMISS_RECAP,
   SQL_HAS_RECAP_FOR_CURSOR,
   SQL_INSERT_RECAP,
   SQL_LATEST_RECAP,
@@ -61,6 +64,7 @@ const recapSchema = z
       .min(1)
       .max(MAX_ID_CHARS * 2),
     suppressed: z.boolean(),
+    dismissedAt: z.number().nullable(),
   })
   .strict();
 export type Recap = z.infer<typeof recapSchema>;
@@ -142,6 +146,15 @@ export const rpcContract = defineRpcContract({
       })
       .strict(),
   },
+  recap_dismiss: {
+    input: z
+      .object({
+        threadId: z.string().min(1).max(MAX_ID_CHARS),
+        recapId: z.string().min(1).max(MAX_ID_CHARS),
+      })
+      .strict(),
+    output: z.object({ dismissed: z.boolean() }).strict(),
+  },
   recap_model_get: {
     input: z.object({}).strict(),
     output: z
@@ -214,6 +227,7 @@ type StoredRecapRow = {
   model: string;
   suppressed: number;
   last_user_row_id: string | null;
+  dismissed_at: number | null;
 };
 
 function result(
@@ -234,6 +248,7 @@ function rowToRecap(row: StoredRecapRow): Recap {
     lastUserRowId: row.last_user_row_id,
     model: row.model,
     suppressed: row.suppressed === 1,
+    dismissedAt: row.dismissed_at,
   };
 }
 
@@ -283,6 +298,7 @@ export default async function plugin(bb: BbPluginApi) {
     SQL_CREATE_RECAPS_INDEX,
     SQL_CREATE_INVALIDATIONS,
     SQL_ADD_RECAP_CURSOR,
+    SQL_ADD_RECAP_DISMISSED,
   ]);
 
   let config = parseStoredSettings(await bb.storage.kv.get(SETTINGS_KEY));
@@ -492,6 +508,7 @@ export default async function plugin(bb: BbPluginApi) {
       model,
       suppressed,
       lastUserRowId,
+      dismissedAt: null,
     };
     db.prepare(SQL_INSERT_RECAP).run(
       stored.id,
@@ -622,7 +639,11 @@ export default async function plugin(bb: BbPluginApi) {
 
   const runWorker = async (
     thread: ThreadSnapshot,
-    input: { transcript: string; previousRecap?: string },
+    input: {
+      transcript: string;
+      previousRecap?: string;
+      latestUserMessages: string[];
+    },
     execution: {
       providerId: string;
       model: string;
@@ -648,6 +669,7 @@ export default async function plugin(bb: BbPluginApi) {
         config.prompt,
         input.transcript,
         input.previousRecap,
+        input.latestUserMessages,
       ),
     });
 
@@ -750,7 +772,7 @@ export default async function plugin(bb: BbPluginApi) {
 
     const suppressed =
       automatic &&
-      (raw.length > 500 ||
+      (raw.length > MAX_AUTOMATIC_RAW_RECAP_CHARS ||
         (summary.endsWith("…") && summary.length >= MAX_RECAP_CHARS));
     const recap = saveRecap(
       threadId,
@@ -962,6 +984,13 @@ export default async function plugin(bb: BbPluginApi) {
       recap: latestRecap(threadId),
       generating: stateFor(threadId).inFlight,
     }),
+    recap_dismiss: async ({ threadId, recapId }) => {
+      const { changes } = db
+        .prepare(SQL_DISMISS_RECAP)
+        .run(Date.now(), recapId, threadId);
+      if (changes > 0) publishChanged({ threadId });
+      return { dismissed: changes > 0 };
+    },
     recap_model_get: async () => currentModelSelection(),
     recap_model_set: async (selection) => {
       const catalog = await bb.sdk.providers.models({

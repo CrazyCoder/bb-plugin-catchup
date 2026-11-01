@@ -104,6 +104,7 @@ function useThreadRecap(threadId: string) {
   const [loading, setLoading] = useState(true);
   const [readError, setReadError] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [dismissedRecapId, setDismissedRecapId] = useState<string | null>(null);
   const threadEpoch = useRef(0);
   const epochThreadId = useRef(threadId);
   const reloadSeq = useRef(0);
@@ -186,13 +187,31 @@ function useThreadRecap(threadId: string) {
     }
   }, [reload, rpc, threadId]);
 
+  const dismiss = useCallback(async (recapId: string) => {
+    const epoch = threadEpoch.current;
+    setDismissedRecapId(recapId);
+    setGenerationError(null);
+    try {
+      await rpc.call("recap_dismiss", { threadId, recapId });
+    } catch (cause) {
+      if (epoch !== threadEpoch.current) return;
+      setDismissedRecapId(null);
+      setGenerationError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [rpc, threadId]);
+
   const currentThread = recapThreadId === threadId;
   return {
     recap: currentThread ? recap : null,
+    dismissed:
+      currentThread &&
+      recap !== null &&
+      (recap.dismissedAt != null || recap.id === dismissedRecapId),
     generating: currentThread ? generating : false,
     loading: currentThread ? loading : true,
     error: currentThread ? (generationError ?? readError) : null,
     generate,
+    dismiss,
   };
 }
 
@@ -267,7 +286,7 @@ function RecapComposerBannerContent({
   threadId: string;
   mode: RecapDisplayMode;
 }) {
-  const { recap, generating, loading, error, generate } = useThreadRecap(threadId);
+  const { recap, dismissed, generating, loading, error, generate, dismiss } = useThreadRecap(threadId);
   const opensExpanded = bannerStartsExpanded(mode);
   const compact = mode === RECAP_DISPLAY_MODES.compact || opensExpanded;
   const [expanded, setExpanded] = useState(opensExpanded);
@@ -275,6 +294,8 @@ function RecapComposerBannerContent({
   useEffect(() => {
     setExpanded(bannerStartsExpanded(mode));
   }, [mode, recap?.id, threadId]);
+
+  if (dismissed) return null;
 
   if (!recap) {
     if (!generating) {
@@ -334,6 +355,7 @@ function RecapComposerBannerContent({
               <span className="hidden sm:inline">{expanded ? "Collapse" : "Expand"}</span>
               <span aria-hidden="true" className="text-sm leading-none">{expanded ? "↓" : "↑"}</span>
             </button>
+            <DismissButton onClick={() => void dismiss(recap.id)} />
           </div>
         </div>
         <div aria-live="polite">
@@ -376,9 +398,12 @@ function RecapComposerBannerContent({
             </p>
           </div>
         </div>
-        <span className="shrink-0 rounded-full border border-border bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
-          {recap.automatic ? "Automatic" : "Manual"}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
+            {recap.automatic ? "Automatic" : "Manual"}
+          </span>
+          <DismissButton onClick={() => void dismiss(recap.id)} />
+        </div>
       </div>
       <div aria-live="polite" className="mt-4">
         <p className="text-base leading-7 text-foreground" title={recap.summary}>
@@ -395,6 +420,21 @@ function RecapComposerBannerContent({
     </div>
   );
 }
+
+function DismissButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-md text-base leading-none text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      aria-label="Dismiss recap"
+      title="Dismiss recap"
+      onClick={onClick}
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  );
+}
+
 const REFRESH_LABELS = ["Refresh", "Loading…", "Generating…"] as const;
 
 /**

@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import {
   SQL_CLEANUP_RECAPS,
   SQL_ADD_RECAP_CURSOR,
+  SQL_ADD_RECAP_DISMISSED,
   SQL_CREATE_INVALIDATIONS,
   SQL_CREATE_RECAPS,
   SQL_CREATE_RECAPS_INDEX,
@@ -21,6 +22,7 @@ function openRecapDb() {
   db.exec(SQL_CREATE_RECAPS_INDEX);
   db.exec(SQL_CREATE_INVALIDATIONS);
   db.exec(SQL_ADD_RECAP_CURSOR);
+  db.exec(SQL_ADD_RECAP_DISMISSED);
   return db;
 }
 

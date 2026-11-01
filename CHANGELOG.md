@@ -6,6 +6,15 @@ All notable changes to Recap are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- Add a × button to the compact banner, expanded banner, and recap card. It hides the current recap on every client until a newer recap replaces it, and the Recap panel still shows it.
+
+### Fixed
+
+- Write recaps in the language of the user's latest messages. The rule now follows the transcript, outside the editable prompt, together with a sample of those messages, so English tool output, a previous English recap, or a saved prompt no longer sets the language. Settings that hold the former default prompt move to the new default.
+- Raise the size limit for automatic recaps from 500 to 800 raw characters, so recaps in languages with longer words than English are not dropped without notice.
+
 ## 0.2.4 - 2026-10-09
 
 ### Added

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
+import { MAX_AUTOMATIC_RAW_RECAP_CHARS } from "../src/recap.ts";
 import plugin from "../src/server.ts";
 import type { Recap, RecapSettings } from "../src/server.ts";
 
@@ -15,6 +16,7 @@ async function createHarness(options: {
   timeline?: (args: { threadId: string; beforeAnchorSeq?: string }) => Promise<unknown>;
   wait?: (threadId: string) => Promise<void>;
   database?: Database.Database;
+  output?: string;
   listThreads?: (args: { parentThreadId?: string }) => Promise<unknown[]>;
 } = {}) {
   const db = options.database ?? new Database(":memory:");
@@ -25,6 +27,7 @@ async function createHarness(options: {
   let handlers!: {
     recap_generate: (input: { threadId: string; automatic: boolean }) => Promise<{ recap: Recap | null; reason: string | null }>;
     recap_get: (input: { threadId: string }) => Promise<{ recap: Recap | null; generating: boolean }>;
+    recap_dismiss: (input: { threadId: string; recapId: string }) => Promise<{ dismissed: boolean }>;
     recap_settings_get: () => Promise<RecapSettings>;
     recap_settings_set: (input: RecapSettings) => Promise<RecapSettings>;
     recap_display_mode_set: (input: { displayMode: RecapSettings["displayMode"] }) => Promise<{ displayMode: RecapSettings["displayMode"] }>;
@@ -48,7 +51,7 @@ async function createHarness(options: {
         })),
         spawn: async (input: (typeof spawned)[number]) => { spawned.push(input); return { id: String(spawned.length) }; },
         wait: async ({ threadId }: { threadId: string }) => { await options.wait?.(threadId); return {}; },
-        output: async () => ({ output: "We did work." }), archive: async () => {}, stop: async () => {},
+        output: async () => ({ output: options.output ?? "We did work." }), archive: async () => {}, stop: async () => {},
       },
       providers: { models: async () => ({ models: [{ id: "m", model: "m", supportedReasoningEfforts: [{ reasoningEffort: "low" }], defaultReasoningEffort: "low" }], providers: [{ id: "p" }] }) },
     },
@@ -74,6 +77,75 @@ test("saves Expanded banner and reads it back", async () => {
     const saved = await harness.handlers.recap_display_mode_set({ displayMode: "Expanded banner" });
     assert.equal(saved.displayMode, "Expanded banner");
     assert.equal((await harness.handlers.recap_settings_get()).displayMode, "Expanded banner");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("a dismissed recap stays dismissed and the next recap is shown", async () => {
+  const harness = await createHarness();
+  try {
+    const first = (await harness.handlers.recap_generate({ threadId: "A", automatic: false })).recap!;
+    assert.equal(first.dismissedAt, null);
+
+    assert.deepEqual(await harness.handlers.recap_dismiss({ threadId: "B", recapId: first.id }), { dismissed: false });
+    assert.equal((await harness.handlers.recap_get({ threadId: "A" })).recap?.dismissedAt, null);
+
+    assert.deepEqual(await harness.handlers.recap_dismiss({ threadId: "A", recapId: first.id }), { dismissed: true });
+    const dismissed = (await harness.handlers.recap_get({ threadId: "A" })).recap;
+    assert.equal(dismissed?.id, first.id);
+    assert.equal(typeof dismissed?.dismissedAt, "number");
+    assert.deepEqual(await harness.handlers.recap_dismiss({ threadId: "A", recapId: first.id }), { dismissed: false });
+
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const next = (await harness.handlers.recap_generate({ threadId: "A", automatic: false })).recap!;
+    assert.notEqual(next.id, first.id);
+    assert.equal((await harness.handlers.recap_get({ threadId: "A" })).recap?.dismissedAt, null);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("a dismissed recap still blocks a duplicate automatic recap for the same turn", async () => {
+  const harness = await createHarness();
+  try {
+    const first = (await harness.handlers.recap_generate({ threadId: "A", automatic: true })).recap!;
+    await harness.handlers.recap_dismiss({ threadId: "A", recapId: first.id });
+    const again = await harness.handlers.recap_generate({ threadId: "A", automatic: true });
+    assert.equal(again.reason, "already_exists");
+    assert.equal(harness.spawned.length, 1);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("an automatic recap is kept up to the raw size limit and dropped above it", async () => {
+  const kept = await createHarness({ output: "ч".repeat(MAX_AUTOMATIC_RAW_RECAP_CHARS) });
+  const dropped = await createHarness({ output: "ч".repeat(MAX_AUTOMATIC_RAW_RECAP_CHARS + 1) });
+  try {
+    assert.ok((await kept.handlers.recap_generate({ threadId: "A", automatic: true })).recap);
+    const result = await dropped.handlers.recap_generate({ threadId: "A", automatic: true });
+    assert.equal(result.recap, null);
+    assert.equal(result.reason, "suppressed");
+  } finally {
+    await kept.close();
+    await dropped.close();
+  }
+});
+
+test("the worker prompt ends with the user's latest messages and the language rule", async () => {
+  const harness = await createHarness({ timeline: async () => ({
+    rows: [
+      { id: "u1", kind: "conversation", role: "user", threadId: "A", text: "Почему страница не скроллится?" },
+      { id: "a1", kind: "conversation", role: "assistant", threadId: "A", text: "The layout breaks height propagation." },
+    ],
+    timelinePage: { hasOlderRows: false, olderCursor: null },
+  }) });
+  try {
+    await harness.handlers.recap_generate({ threadId: "A", automatic: false });
+    const { prompt } = harness.spawned[0];
+    assert.match(prompt, /<latest-user-messages>\nПочему страница не скроллится\?\n<\/latest-user-messages>/);
+    assert.match(prompt, /in the language of the user's most recent messages[^\n]*$/);
   } finally {
     await harness.close();
   }
@@ -121,7 +193,8 @@ test("pagination cannot skip new requests when older pages drop out of the windo
     assert.match(harness.spawned[1].prompt, /<previous-recap>/);
     assert.match(harness.spawned[1].prompt, /New request 22/);
     assert.match(harness.spawned[1].prompt, /New request 23/);
-    assert.doesNotMatch(harness.spawned[1].prompt, /New request 21/);
+    const secondPrompt = harness.spawned[1].prompt;
+    assert.doesNotMatch(secondPrompt.slice(0, secondPrompt.indexOf("</session-transcript>")), /New request 21/);
     // Counts can stay the same in successive windows; the row ID still moves.
     await harness.handlers.recap_settings_set({ ...harness.settings, auto: true });
     pageCount = 25;
